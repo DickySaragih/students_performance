@@ -9,7 +9,7 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
 # --- Pengaturan Tampilan Plot ---
 sns.set(style="whitegrid")
@@ -79,7 +79,11 @@ def plot_boxplot(df, x_col, y_col, title, xlabel, ylabel, palette='Set2'):
     plt.tight_layout()
     st.pyplot(plt)
 
-def display_classification_report(y_test, y_pred, target_names):
+def display_classification_report(y_test, y_pred, label_encoder, present_labels):
+    try:
+        target_names = label_encoder.inverse_transform(present_labels)
+    except ValueError:
+        target_names = [str(lbl) for lbl in present_labels]
     report = classification_report(y_test, y_pred, target_names=target_names, output_dict=True)
     report_df = pd.DataFrame(report).transpose()
     st.subheader("Classification Report")
@@ -103,7 +107,7 @@ Aplikasi ini memuat data performa siswa, melakukan preprocessing, melatih model 
 dan menampilkan hasil analisis serta prediksi status dropout.
 """)
 
-# Ganti ini jika menggunakan file lokal
+# Ganti dengan path lokal jika perlu
 url = 'https://raw.githubusercontent.com/DickySaragih/data_science_02/main/Students_Performance.csv'
 df = load_and_clean_data(url)
 
@@ -111,8 +115,7 @@ if st.sidebar.checkbox("Tampilkan Data Mentah"):
     st.subheader("Data Mentah (5 Baris Pertama)")
     st.dataframe(df.head())
     st.subheader("Info Data")
-    buffer = df.info(buf=None)
-    st.text(buffer)
+    st.write(df.describe())
     st.subheader("Distribusi Target")
     st.write(df['dropout_status'].value_counts())
 
@@ -139,11 +142,14 @@ X_train, X_test, y_train, y_test, feature_names, le, scaler, cat_cols, num_cols 
 model = train_model(X_train, y_train)
 y_pred = model.predict(X_test)
 
-# --- Confusion Matrix (dengan label aman) ---
+# --- Confusion Matrix (Aman) ---
 st.subheader("Confusion Matrix")
 cm = confusion_matrix(y_test, y_pred)
-label_indices = np.unique(y_test)
-display_labels = le.classes_[label_indices]
+present_labels = np.unique(y_test)
+try:
+    display_labels = le.inverse_transform(present_labels)
+except ValueError:
+    display_labels = [str(i) for i in present_labels]
 disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
 fig, ax = plt.subplots()
 disp.plot(cmap='Blues', ax=ax)
@@ -151,7 +157,7 @@ plt.title("Confusion Matrix")
 st.pyplot(fig)
 
 # --- Classification Report dan Feature Importance ---
-display_classification_report(y_test, y_pred, target_names=display_labels)
+display_classification_report(y_test, y_pred, le, present_labels)
 plot_feature_importance(model, feature_names)
 
 # --- Prediksi Individu ---
