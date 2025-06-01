@@ -33,8 +33,8 @@ def preprocess_data(df):
     le_y = LabelEncoder()
     y_encoded = le_y.fit_transform(y)
 
-    categorical_cols = X.select_dtypes(include=['object', 'category']).columns
-    numeric_cols = X.select_dtypes(include=np.number).columns
+    categorical_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
+    numeric_cols = X.select_dtypes(include=np.number).columns.tolist()
 
     encoders = {}
     for col in categorical_cols:
@@ -43,12 +43,11 @@ def preprocess_data(df):
         encoders[col] = le_col
 
     scaler = StandardScaler()
-    if len(numeric_cols) > 0:
-        X[numeric_cols] = scaler.fit_transform(X[numeric_cols])
+    X[numeric_cols] = scaler.fit_transform(X[numeric_cols])
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
 
-    return X_train, X_test, y_train, y_test, X.columns, le_y, scaler, encoders, categorical_cols, numeric_cols
+    return X_train, X_test, y_train, y_test, X.columns.tolist(), le_y, scaler, encoders, categorical_cols, numeric_cols
 
 # --- Fungsi Pelatihan Model ---
 @st.cache_resource
@@ -110,89 +109,90 @@ Aplikasi ini memuat data performa siswa, melakukan preprocessing, melatih model 
 dan menampilkan hasil analisis serta prediksi status dropout.
 """)
 
-# Load data
 url = 'https://raw.githubusercontent.com/DickySaragih/data_science_02/main/Students_Performance.csv'
 df = load_and_clean_data(url)
 
-# Sidebar - opsi data mentah
+# --- Sidebar: Opsi ---
 if st.sidebar.checkbox("Tampilkan Data Mentah"):
     st.subheader("Data Mentah (5 Baris Pertama)")
     st.dataframe(df.head())
     st.subheader("Distribusi Target")
     st.write(df['dropout_status'].value_counts())
 
-# Preprocessing dan Model
-X_train, X_test, y_train, y_test, feature_names, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
-model = train_model(X_train, y_train)
-y_pred = model.predict(X_test)
+# --- Eksplorasi Data ---
+st.header("Eksplorasi Data (EDA)")
 
-# Tab visualisasi & prediksi individu
-tab1, tab2 = st.tabs(["📊 Visualisasi & Evaluasi", "🎯 Prediksi Individu"])
+st.subheader("1. Distribusi Status Dropout Mahasiswa")
+plot_distribution(df, 'dropout_status', "Distribusi Status Dropout Mahasiswa", "Status", "Jumlah Mahasiswa")
 
-with tab1:
-    st.header("Eksplorasi Data (EDA)")
-    st.subheader("1. Distribusi Status Dropout Mahasiswa")
-    plot_distribution(df, 'dropout_status', "Distribusi Status Dropout Mahasiswa", "Status", "Jumlah Mahasiswa")
+st.subheader("2. Distribusi Dropout Berdasarkan Gender")
+plot_distribution(df, 'gender', "Distribusi Dropout Berdasarkan Gender", "Gender", "Jumlah Mahasiswa", hue='dropout_status')
 
-    st.subheader("2. Distribusi Dropout Berdasarkan Gender")
-    plot_distribution(df, 'gender', "Distribusi Dropout Berdasarkan Gender", "Gender", "Jumlah Mahasiswa", hue='dropout_status')
-
+if 'course' in df.columns:
     st.subheader("3. Distribusi Dropout Berdasarkan Jenis Kursus")
     order = df['course'].value_counts().index
     plot_distribution(df, 'course', "Distribusi Dropout Berdasarkan Jenis Kursus", "Kursus", "Jumlah Mahasiswa", hue='dropout_status', order=order)
 
+if 'marital_status' in df.columns:
     st.subheader("4. Dropout Berdasarkan Status Pernikahan")
     plot_distribution(df, 'marital_status', "Dropout Berdasarkan Status Pernikahan", "Status Pernikahan", "Jumlah Mahasiswa", hue='dropout_status')
 
+if 'age_at_enrollment' in df.columns:
     st.subheader("5. Usia saat Masuk Kuliah vs Status Dropout")
     plot_boxplot(df, 'dropout_status', 'age_at_enrollment', "Usia saat Masuk Kuliah vs Status Dropout", "Status", "Usia Saat Enroll")
 
-    st.header("Model dan Evaluasi")
-    st.subheader("Confusion Matrix")
-    cm = confusion_matrix(y_test, y_pred)
-    present_labels = np.unique(y_test)
-    try:
-        display_labels = le_y.inverse_transform(present_labels)
-    except ValueError:
-        display_labels = [str(i) for i in present_labels]
-    fig, ax = plt.subplots()
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
-    disp.plot(cmap='Blues', ax=ax)
-    plt.title("Confusion Matrix")
-    st.pyplot(fig)
+# --- Pelatihan dan Evaluasi Model ---
+st.header("Model dan Evaluasi")
+X_train, X_test, y_train, y_test, feature_names, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
+model = train_model(X_train, y_train)
+y_pred = model.predict(X_test)
 
-    display_classification_report(y_test, y_pred, le_y, present_labels)
-    plot_feature_importance(model, feature_names)
+# --- Confusion Matrix ---
+st.subheader("Confusion Matrix")
+cm = confusion_matrix(y_test, y_pred)
+present_labels = np.unique(y_test)
+display_labels = le_y.inverse_transform(present_labels)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
+fig, ax = plt.subplots()
+disp.plot(cmap='Blues', ax=ax)
+plt.title("Confusion Matrix")
+st.pyplot(fig)
 
-with tab2:
-    st.header("🎯 Prediksi Status Dropout Mahasiswa (Individu)")
-    st.markdown("Masukkan data siswa untuk memprediksi apakah berpotensi dropout:")
+# --- Classification Report dan Feature Importance ---
+display_classification_report(y_test, y_pred, le_y, present_labels)
+plot_feature_importance(model, feature_names)
 
-    input_data = {}
-    input_data['gender'] = st.selectbox("Gender", df['gender'].unique())
-    input_data['age_at_enrollment'] = st.slider("Age at Enrollment", int(df['age_at_enrollment'].min()), int(df['age_at_enrollment'].max()), 20)
-    input_data['course'] = st.selectbox("Course", df['course'].unique())
-    input_data['marital_status'] = st.selectbox("Marital Status", df['marital_status'].unique())
+# --- Prediksi Individu ---
+st.header("Prediksi Individu")
+st.markdown("Masukkan data siswa untuk memprediksi apakah berpotensi dropout:")
 
-    input_df = pd.DataFrame([input_data])
+# Ambil input sesuai semua kolom fitur dari data asli
+input_data = {}
+for col in feature_names:
+    if col in cat_cols:
+        options = df[col].unique().tolist()
+        input_data[col] = st.selectbox(f"{col.replace('_', ' ').capitalize()}", options)
+    elif col in num_cols:
+        min_val = int(df[col].min())
+        max_val = int(df[col].max())
+        mean_val = int(df[col].mean())
+        input_data[col] = st.slider(f"{col.replace('_', ' ').capitalize()}", min_val, max_val, mean_val)
+
+input_df = pd.DataFrame([input_data])
+
+# Transformasi input sesuai dengan encoder dan scaler
+try:
+    for col in cat_cols:
+        input_df[col] = encoders[col].transform(input_df[col])
+
+    input_df[num_cols] = scaler.transform(input_df[num_cols])
 
     if st.button("Prediksi Dropout"):
-        try:
-            for col in cat_cols:
-                if input_df[col].iloc[0] in encoders[col].classes_:
-                    input_df[col] = encoders[col].transform(input_df[col])
-                else:
-                    st.error(f"Nilai '{input_df[col].iloc[0]}' tidak dikenali untuk kolom '{col}'")
-                    st.stop()
-
-            input_df[num_cols] = scaler.transform(input_df[num_cols])
-            input_df = input_df[X_train.columns]  # pastikan urutan kolom sesuai
-            pred = model.predict(input_df)
-            result = le_y.inverse_transform(pred)
-            st.success(f"Prediksi Status: **{result[0]}**")
-
-        except Exception as e:
-            st.error(f"Terjadi error saat memproses input: {e}")
+        pred = model.predict(input_df)
+        result = le_y.inverse_transform(pred)
+        st.success(f"Prediksi Status: {result[0]}")
+except Exception as e:
+    st.error(f"Terjadi error saat memproses input: {e}")
 
 st.markdown("---")
-st.caption("Aplikasi dibuat oleh Dicky Candid Saragih")
+st.write("Aplikasi dibuat oleh Dicky Candid Saragih")
