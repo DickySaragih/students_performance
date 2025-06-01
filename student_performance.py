@@ -111,65 +111,71 @@ dan menampilkan hasil analisis serta prediksi status dropout.
 url = 'https://raw.githubusercontent.com/DickySaragih/data_science_02/main/Students_Performance.csv'
 df = load_and_clean_data(url)
 
-if st.sidebar.checkbox("Tampilkan Data Mentah"):
-    st.subheader("Data Mentah (5 Baris Pertama)")
-    st.dataframe(df.head())
-    st.subheader("Distribusi Target")
-    st.write(df['dropout_status'].value_counts())
+menu = st.sidebar.radio("Pilih Halaman:", ("Visualisasi & Model", "Prediksi Individu"))
 
-st.header("Eksplorasi Data (EDA)")
-plot_distribution(df, 'dropout_status', "Distribusi Status Dropout Mahasiswa", "Status", "Jumlah Mahasiswa")
-plot_distribution(df, 'gender', "Distribusi Dropout Berdasarkan Gender", "Gender", "Jumlah Mahasiswa", hue='dropout_status')
-order = df['course'].value_counts().index
-plot_distribution(df, 'course', "Distribusi Dropout Berdasarkan Jenis Kursus", "Jumlah Mahasiswa", "Kursus", hue='dropout_status', order=order)
-plot_distribution(df, 'marital_status', "Dropout Berdasarkan Status Pernikahan", "Status Pernikahan", "Jumlah Mahasiswa", hue='dropout_status')
-plot_boxplot(df, 'dropout_status', 'age_at_enrollment', "Usia saat Masuk Kuliah vs Status Dropout", "Status", "Usia Saat Enroll")
+if menu == "Visualisasi & Model":
+    if st.sidebar.checkbox("Tampilkan Data Mentah"):
+        st.subheader("Data Mentah (5 Baris Pertama)")
+        st.dataframe(df.head())
+        st.subheader("Distribusi Target")
+        st.write(df['dropout_status'].value_counts())
 
-st.header("Model dan Evaluasi")
-X_train, X_test, y_train, y_test, feature_names, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
-model = train_model(X_train, y_train)
-y_pred = model.predict(X_test)
+    st.header("Eksplorasi Data (EDA)")
+    plot_distribution(df, 'dropout_status', "Distribusi Status Dropout Mahasiswa", "Status", "Jumlah Mahasiswa")
+    plot_distribution(df, 'gender', "Distribusi Dropout Berdasarkan Gender", "Gender", "Jumlah Mahasiswa", hue='dropout_status')
+    order = df['course'].value_counts().index
+    plot_distribution(df, 'course', "Distribusi Dropout Berdasarkan Jenis Kursus", "Jumlah Mahasiswa", "Kursus", hue='dropout_status', order=order)
+    plot_distribution(df, 'marital_status', "Dropout Berdasarkan Status Pernikahan", "Status Pernikahan", "Jumlah Mahasiswa", hue='dropout_status')
+    plot_boxplot(df, 'dropout_status', 'age_at_enrollment', "Usia saat Masuk Kuliah vs Status Dropout", "Status", "Usia Saat Enroll")
 
-st.subheader("Confusion Matrix")
-cm = confusion_matrix(y_test, y_pred)
-present_labels = np.unique(y_test)
-try:
-    display_labels = le_y.inverse_transform(present_labels)
-except ValueError:
-    display_labels = [str(i) for i in present_labels]
-fig, ax = plt.subplots()
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
-disp.plot(cmap='Blues', ax=ax)
-plt.title("Confusion Matrix")
-st.pyplot(fig)
+    st.header("Model dan Evaluasi")
+    X_train, X_test, y_train, y_test, feature_names, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
+    model = train_model(X_train, y_train)
+    y_pred = model.predict(X_test)
 
-display_classification_report(y_test, y_pred, le_y, present_labels)
-plot_feature_importance(model, feature_names)
+    st.subheader("Confusion Matrix")
+    cm = confusion_matrix(y_test, y_pred)
+    present_labels = np.unique(y_test)
+    try:
+        display_labels = le_y.inverse_transform(present_labels)
+    except ValueError:
+        display_labels = [str(i) for i in present_labels]
+    fig, ax = plt.subplots()
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
+    disp.plot(cmap='Blues', ax=ax)
+    plt.title("Confusion Matrix")
+    st.pyplot(fig)
 
-st.header("Prediksi Individu")
-st.markdown("Masukkan data siswa untuk memprediksi apakah berpotensi dropout:")
+    display_classification_report(y_test, y_pred, le_y, present_labels)
+    plot_feature_importance(model, feature_names)
 
-input_data = {}
-for col in cat_cols:
-    options = df[col].unique().tolist()
-    input_data[col] = st.selectbox(col.replace('_', ' ').title(), options)
-for col in num_cols:
-    min_val = int(df[col].min())
-    max_val = int(df[col].max())
-    input_data[col] = st.slider(col.replace('_', ' ').title(), min_val, max_val, int(df[col].mean()))
+elif menu == "Prediksi Individu":
+    st.header("Prediksi Individu")
+    st.markdown("Masukkan data siswa untuk memprediksi apakah berpotensi dropout:")
 
-input_df = pd.DataFrame([input_data])
+    X_train, _, _, _, _, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
+    model = train_model(X_train, le_y.transform(df['dropout_status']))
 
-# Encoding input
-for col in cat_cols:
-    input_df[col] = encoders[col].transform(input_df[col])
-if num_cols:
-    input_df[num_cols] = scaler.transform(input_df[num_cols])
+    input_data = {}
+    for col in cat_cols:
+        options = df[col].unique().tolist()
+        input_data[col] = st.selectbox(col.replace('_', ' ').title(), options)
+    for col in num_cols:
+        min_val = int(df[col].min())
+        max_val = int(df[col].max())
+        input_data[col] = st.slider(col.replace('_', ' ').title(), min_val, max_val, int(df[col].mean()))
 
-if st.button("Prediksi Dropout"):
-    pred = model.predict(input_df)
-    result = le_y.inverse_transform(pred)
-    st.success(f"Prediksi Status: {result[0]}")
+    input_df = pd.DataFrame([input_data])
+
+    for col in cat_cols:
+        input_df[col] = encoders[col].transform(input_df[col])
+    if num_cols:
+        input_df[num_cols] = scaler.transform(input_df[num_cols])
+
+    if st.button("Prediksi Dropout"):
+        pred = model.predict(input_df)
+        result = le_y.inverse_transform(pred)
+        st.success(f"Prediksi Status: {result[0]}")
 
 st.markdown("---")
 st.write("Aplikasi dibuat oleh Dicky Candid Saragih")
