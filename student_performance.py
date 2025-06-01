@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+"""student_performance"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,11 +11,11 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
-# Pengaturan Tampilan Plot
+# --- Pengaturan Tampilan Plot ---
 sns.set(style="whitegrid")
 plt.rcParams['figure.figsize'] = (10, 6)
 
-# Fungsi Memuat dan Membersihkan Data
+# --- Fungsi Memuat dan Membersihkan Data ---
 @st.cache_data
 def load_and_clean_data(url):
     df = pd.read_csv(url)
@@ -21,7 +24,7 @@ def load_and_clean_data(url):
     df = df.dropna()
     return df
 
-# Fungsi Preprocessing
+# --- Fungsi Preprocessing ---
 @st.cache_data
 def preprocess_data(df):
     X = df.drop('dropout_status', axis=1)
@@ -30,8 +33,8 @@ def preprocess_data(df):
     le_y = LabelEncoder()
     y_encoded = le_y.fit_transform(y)
 
-    categorical_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
-    numeric_cols = X.select_dtypes(include=np.number).columns.tolist()
+    categorical_cols = X.select_dtypes(include=['object', 'category']).columns
+    numeric_cols = X.select_dtypes(include=np.number).columns
 
     encoders = {}
     for col in categorical_cols:
@@ -40,25 +43,24 @@ def preprocess_data(df):
         encoders[col] = le_col
 
     scaler = StandardScaler()
-    if numeric_cols:
+    if len(numeric_cols) > 0:
         X[numeric_cols] = scaler.fit_transform(X[numeric_cols])
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
 
-    return X_train, X_test, y_train, y_test, X.columns.tolist(), le_y, scaler, encoders, categorical_cols, numeric_cols
+    return X_train, X_test, y_train, y_test, X.columns, le_y, scaler, encoders, categorical_cols, numeric_cols
 
-# Fungsi Pelatihan Model
+# --- Fungsi Pelatihan Model ---
 @st.cache_resource
 def train_model(X_train, y_train):
     model = RandomForestClassifier(random_state=42)
     model.fit(X_train, y_train)
     return model
 
-# Fungsi Visualisasi
-
+# --- Fungsi Visualisasi ---
 def plot_distribution(df, col, title, xlabel, ylabel, hue=None, palette='Set2', order=None):
     plt.figure(figsize=(10, 6))
-    if df[col].dtype == 'object' or df[col].dtype.name == 'category':
+    if df[col].dtype == 'object' or df[col].dtype == 'category':
         sns.countplot(data=df, x=col, hue=hue, palette=palette, order=order)
         plt.xticks(rotation=45, ha='right')
     else:
@@ -101,19 +103,22 @@ def plot_feature_importance(model, feature_names):
     plt.tight_layout()
     st.pyplot(plt)
 
-# Streamlit App
+# --- Streamlit App ---
 st.title("Prediksi Status Dropout Mahasiswa")
 st.markdown("""
 Aplikasi ini memuat data performa siswa, melakukan preprocessing, melatih model Random Forest,
 dan menampilkan hasil analisis serta prediksi status dropout.
 """)
 
+# Navigasi Halaman
+page = st.sidebar.radio("Pilih Halaman", ["Analisis & Visualisasi", "Prediksi Individu"])
+
+# Load data
 url = 'https://raw.githubusercontent.com/DickySaragih/data_science_02/main/Students_Performance.csv'
 df = load_and_clean_data(url)
 
-menu = st.sidebar.radio("Pilih Halaman:", ("Visualisasi & Model", "Prediksi Individu"))
-
-if menu == "Visualisasi & Model":
+# --- Halaman 1: Analisis & Visualisasi ---
+if page == "Analisis & Visualisasi":
     if st.sidebar.checkbox("Tampilkan Data Mentah"):
         st.subheader("Data Mentah (5 Baris Pertama)")
         st.dataframe(df.head())
@@ -121,18 +126,29 @@ if menu == "Visualisasi & Model":
         st.write(df['dropout_status'].value_counts())
 
     st.header("Eksplorasi Data (EDA)")
+    st.subheader("1. Distribusi Status Dropout Mahasiswa")
     plot_distribution(df, 'dropout_status', "Distribusi Status Dropout Mahasiswa", "Status", "Jumlah Mahasiswa")
+
+    st.subheader("2. Distribusi Dropout Berdasarkan Gender")
     plot_distribution(df, 'gender', "Distribusi Dropout Berdasarkan Gender", "Gender", "Jumlah Mahasiswa", hue='dropout_status')
+
+    st.subheader("3. Distribusi Dropout Berdasarkan Jenis Kursus")
     order = df['course'].value_counts().index
     plot_distribution(df, 'course', "Distribusi Dropout Berdasarkan Jenis Kursus", "Jumlah Mahasiswa", "Kursus", hue='dropout_status', order=order)
+
+    st.subheader("4. Dropout Berdasarkan Status Pernikahan")
     plot_distribution(df, 'marital_status', "Dropout Berdasarkan Status Pernikahan", "Status Pernikahan", "Jumlah Mahasiswa", hue='dropout_status')
+
+    st.subheader("5. Usia saat Masuk Kuliah vs Status Dropout")
     plot_boxplot(df, 'dropout_status', 'age_at_enrollment', "Usia saat Masuk Kuliah vs Status Dropout", "Status", "Usia Saat Enroll")
 
+    # --- Model dan Evaluasi ---
     st.header("Model dan Evaluasi")
     X_train, X_test, y_train, y_test, feature_names, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
     model = train_model(X_train, y_train)
     y_pred = model.predict(X_test)
 
+    # Confusion Matrix
     st.subheader("Confusion Matrix")
     cm = confusion_matrix(y_test, y_pred)
     present_labels = np.unique(y_test)
@@ -140,8 +156,8 @@ if menu == "Visualisasi & Model":
         display_labels = le_y.inverse_transform(present_labels)
     except ValueError:
         display_labels = [str(i) for i in present_labels]
-    fig, ax = plt.subplots()
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
+    fig, ax = plt.subplots()
     disp.plot(cmap='Blues', ax=ax)
     plt.title("Confusion Matrix")
     st.pyplot(fig)
@@ -149,33 +165,33 @@ if menu == "Visualisasi & Model":
     display_classification_report(y_test, y_pred, le_y, present_labels)
     plot_feature_importance(model, feature_names)
 
-elif menu == "Prediksi Individu":
+# --- Halaman 2: Prediksi Individu ---
+elif page == "Prediksi Individu":
     st.header("Prediksi Individu")
     st.markdown("Masukkan data siswa untuk memprediksi apakah berpotensi dropout:")
 
-    X_train, _, _, _, _, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
-    model = train_model(X_train, le_y.transform(df['dropout_status']))
+    # Pastikan preprocessing dijalankan
+    X_train, X_test, y_train, y_test, feature_names, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
+    model = train_model(X_train, y_train)
 
     input_data = {}
-    for col in cat_cols:
-        options = df[col].unique().tolist()
-        input_data[col] = st.selectbox(col.replace('_', ' ').title(), options)
-    for col in num_cols:
-        min_val = int(df[col].min())
-        max_val = int(df[col].max())
-        input_data[col] = st.slider(col.replace('_', ' ').title(), min_val, max_val, int(df[col].mean()))
+    input_data['gender'] = st.selectbox("Gender", df['gender'].unique())
+    input_data['age_at_enrollment'] = st.slider("Age at Enrollment", int(df['age_at_enrollment'].min()), int(df['age_at_enrollment'].max()), 20)
+    input_data['course'] = st.selectbox("Course", df['course'].unique())
+    input_data['marital_status'] = st.selectbox("Marital Status", df['marital_status'].unique())
 
     input_df = pd.DataFrame([input_data])
 
     for col in cat_cols:
         input_df[col] = encoders[col].transform(input_df[col])
-    if num_cols:
-        input_df[num_cols] = scaler.transform(input_df[num_cols])
+
+    input_df[num_cols] = scaler.transform(input_df[num_cols])
 
     if st.button("Prediksi Dropout"):
         pred = model.predict(input_df)
         result = le_y.inverse_transform(pred)
-        st.success(f"Prediksi Status: {result[0]}")
+        st.success(f"Prediksi Status: **{result[0]}**")
 
+# Footer
 st.markdown("---")
 st.write("Aplikasi dibuat oleh Dicky Candid Saragih")
