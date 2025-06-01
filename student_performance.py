@@ -174,17 +174,31 @@ elif page == "Prediksi Individu":
     X_train, X_test, y_train, y_test, feature_names, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
     model = train_model(X_train, y_train)
 
+    # Inisialisasi input
     input_data = {}
     input_data['gender'] = st.selectbox("Gender", df['gender'].unique())
     input_data['age_at_enrollment'] = st.slider("Age at Enrollment", int(df['age_at_enrollment'].min()), int(df['age_at_enrollment'].max()), 20)
     input_data['course'] = st.selectbox("Course", df['course'].unique())
     input_data['marital_status'] = st.selectbox("Marital Status", df['marital_status'].unique())
 
-    input_df = pd.DataFrame([input_data])
+    # Buat DataFrame kosong dengan semua kolom
+    input_df = pd.DataFrame(columns=feature_names)
+    
+    # Isi nilai yang diinput user
+    for key in input_data:
+        input_df.at[0, key] = input_data[key]
 
+    # Default untuk kolom lain
+    for col in feature_names:
+        if col not in input_df.columns:
+            input_df.at[0, col] = 0
+
+    # Encode kategori
     for col in cat_cols:
-        input_df[col] = encoders[col].transform(input_df[col])
+        if col in input_df.columns:
+            input_df[col] = encoders[col].transform(input_df[col])
 
+    # Scale numerik
     input_df[num_cols] = scaler.transform(input_df[num_cols])
 
     if st.button("Prediksi Dropout"):
