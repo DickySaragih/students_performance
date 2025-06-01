@@ -197,7 +197,7 @@ if len(num_cols) > 0:
 # --- Urutkan kolom sesuai model ---
 input_df = input_df[feature_names]
 
-if st.button("Prediksi Dropout"):
+if st.button("Prediksi Dropout/Graduate"):
     try:
         pred = model.predict(input_df)
         result = le_y.inverse_transform(pred)
