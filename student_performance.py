@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
@@ -104,7 +103,7 @@ Aplikasi ini memuat data performa siswa, melakukan preprocessing, melatih model 
 dan menampilkan hasil analisis serta prediksi status dropout.
 """)
 
-# Ganti URL ini jika Anda menggunakan file lokal:
+# Ganti ini jika menggunakan file lokal
 url = 'https://raw.githubusercontent.com/DickySaragih/data_science_02/main/Students_Performance.csv'
 df = load_and_clean_data(url)
 
@@ -112,7 +111,8 @@ if st.sidebar.checkbox("Tampilkan Data Mentah"):
     st.subheader("Data Mentah (5 Baris Pertama)")
     st.dataframe(df.head())
     st.subheader("Info Data")
-    st.write(df.info())
+    buffer = df.info(buf=None)
+    st.text(buffer)
     st.subheader("Distribusi Target")
     st.write(df['dropout_status'].value_counts())
 
@@ -133,23 +133,25 @@ plot_distribution(df, 'marital_status', "Dropout Berdasarkan Status Pernikahan",
 st.subheader("5. Usia saat Masuk Kuliah vs Status Dropout")
 plot_boxplot(df, 'dropout_status', 'age_at_enrollment', "Usia saat Masuk Kuliah vs Status Dropout", "Status", "Usia Saat Enroll")
 
+# --- Model dan Evaluasi ---
 st.header("Model dan Evaluasi")
 X_train, X_test, y_train, y_test, feature_names, le, scaler, cat_cols, num_cols = preprocess_data(df)
 model = train_model(X_train, y_train)
 y_pred = model.predict(X_test)
 
-# --- Confusion Matrix (Perbaikan di bawah) ---
+# --- Confusion Matrix (dengan label aman) ---
 st.subheader("Confusion Matrix")
 cm = confusion_matrix(y_test, y_pred)
-present_labels = np.unique(y_test)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=le.inverse_transform(present_labels))
+label_indices = np.unique(y_test)
+display_labels = le.classes_[label_indices]
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
 fig, ax = plt.subplots()
 disp.plot(cmap='Blues', ax=ax)
 plt.title("Confusion Matrix")
 st.pyplot(fig)
 
 # --- Classification Report dan Feature Importance ---
-display_classification_report(y_test, y_pred, target_names=le.inverse_transform(np.unique(y_test)))
+display_classification_report(y_test, y_pred, target_names=display_labels)
 plot_feature_importance(model, feature_names)
 
 # --- Prediksi Individu ---
@@ -164,7 +166,7 @@ input_data['marital_status'] = st.selectbox("Marital Status", df['marital_status
 
 input_df = pd.DataFrame([input_data])
 
-# Encode input
+# Encode input data
 for col in cat_cols:
     input_df[col] = le.transform(input_df[col])
 
