@@ -30,14 +30,17 @@ def preprocess_data(df):
     X = df.drop('dropout_status', axis=1)
     y = df['dropout_status']
 
-    le = LabelEncoder()
-    y_encoded = le.fit_transform(y)
+    le_y = LabelEncoder()
+    y_encoded = le_y.fit_transform(y)
 
     categorical_cols = X.select_dtypes(include=['object', 'category']).columns
     numeric_cols = X.select_dtypes(include=np.number).columns
 
+    encoders = {}
     for col in categorical_cols:
-        X[col] = le.fit_transform(X[col])
+        le_col = LabelEncoder()
+        X[col] = le_col.fit_transform(X[col])
+        encoders[col] = le_col
 
     scaler = StandardScaler()
     if len(numeric_cols) > 0:
@@ -45,7 +48,7 @@ def preprocess_data(df):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
 
-    return X_train, X_test, y_train, y_test, X.columns, le, scaler, categorical_cols, numeric_cols
+    return X_train, X_test, y_train, y_test, X.columns, le_y, scaler, encoders, categorical_cols, numeric_cols
 
 # --- Fungsi Pelatihan Model ---
 @st.cache_resource
@@ -107,15 +110,13 @@ Aplikasi ini memuat data performa siswa, melakukan preprocessing, melatih model 
 dan menampilkan hasil analisis serta prediksi status dropout.
 """)
 
-# Ganti dengan path lokal jika perlu
+# URL CSV atau path lokal
 url = 'https://raw.githubusercontent.com/DickySaragih/data_science_02/main/Students_Performance.csv'
 df = load_and_clean_data(url)
 
 if st.sidebar.checkbox("Tampilkan Data Mentah"):
     st.subheader("Data Mentah (5 Baris Pertama)")
     st.dataframe(df.head())
-    st.subheader("Info Data")
-    st.write(df.describe())
     st.subheader("Distribusi Target")
     st.write(df['dropout_status'].value_counts())
 
@@ -138,16 +139,16 @@ plot_boxplot(df, 'dropout_status', 'age_at_enrollment', "Usia saat Masuk Kuliah 
 
 # --- Model dan Evaluasi ---
 st.header("Model dan Evaluasi")
-X_train, X_test, y_train, y_test, feature_names, le, scaler, cat_cols, num_cols = preprocess_data(df)
+X_train, X_test, y_train, y_test, feature_names, le_y, scaler, encoders, cat_cols, num_cols = preprocess_data(df)
 model = train_model(X_train, y_train)
 y_pred = model.predict(X_test)
 
-# --- Confusion Matrix (Aman) ---
+# --- Confusion Matrix ---
 st.subheader("Confusion Matrix")
 cm = confusion_matrix(y_test, y_pred)
 present_labels = np.unique(y_test)
 try:
-    display_labels = le.inverse_transform(present_labels)
+    display_labels = le_y.inverse_transform(present_labels)
 except ValueError:
     display_labels = [str(i) for i in present_labels]
 disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
@@ -157,7 +158,7 @@ plt.title("Confusion Matrix")
 st.pyplot(fig)
 
 # --- Classification Report dan Feature Importance ---
-display_classification_report(y_test, y_pred, le, present_labels)
+display_classification_report(y_test, y_pred, le_y, present_labels)
 plot_feature_importance(model, feature_names)
 
 # --- Prediksi Individu ---
@@ -172,15 +173,15 @@ input_data['marital_status'] = st.selectbox("Marital Status", df['marital_status
 
 input_df = pd.DataFrame([input_data])
 
-# Encode input data
+# Encode input
 for col in cat_cols:
-    input_df[col] = le.transform(input_df[col])
+    input_df[col] = encoders[col].transform(input_df[col])
 
 input_df[num_cols] = scaler.transform(input_df[num_cols])
 
 if st.button("Prediksi Dropout"):
     pred = model.predict(input_df)
-    result = le.inverse_transform(pred)
+    result = le_y.inverse_transform(pred)
     st.success(f"Prediksi Status: {result[0]}")
 
 st.markdown("---")
